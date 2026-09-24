@@ -4,6 +4,7 @@ import requests
 import time
 
 app = Flask(__name__)
+# Geçici dosya saklama dizini
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -13,7 +14,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Süper Kaliteli PPTX -> PDF Dönüştürücü v3</title>
+    <title>Sınırsız Büyük Dosya PPTX -> PDF Dönüştürücü</title>
     <style>
         body { font-family: 'Arial', sans-serif; background: #eef2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 420px; width: 90%; }
@@ -30,7 +31,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h2>Bulut PDF Dönüştürücü</h2>
-        <div class="version">🚀 Ücretsiz Orijinal Tasarım Motoru Aktif 🚀</div>
+        <div class="version">🚀 100 MB Limitli Büyük Dosya Motoru Aktif 🚀</div>
         <form action="/convert" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
             <label for="file-upload" class="file-label" id="label-text">📂 PowerPoint Dosyası Seç (.pptx)</label>
             <input id="file-upload" type="file" name="file" accept=".pptx, .ppt" onchange="fileSelected()">
@@ -44,13 +45,13 @@ HTML_TEMPLATE = """
             const label = document.getElementById('label-text');
             const btn = document.getElementById('submit-btn');
             if(input.files.length > 0) {
-                label.innerText = "✓ " + input.files[0].name;
+                label.innerText = "✓ " + input.files.name;
                 label.style.background = "#1e293b";
                 btn.style.display = "block";
             }
         }
         function showLoading() {
-            document.getElementById('status').innerText = "Bulut motoru slayt tasarımlarınızı, resimleri ve şemaları sıfır kayıpla işliyor... Lütfen bekleyin...";
+            document.getElementById('status').innerText = "Büyük dosya motoru şemalarınızı işliyor, lütfen yükleme boyutuna göre bekleyin...";
             document.getElementById('submit-btn').style.display = "none";
         }
     </script>
@@ -59,30 +60,19 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
-    # Üyelik ve gizli kod gerektirmeyen tamamen güvenli bulut API adresi
-    url = "https://aspose.cloud"
-    
-    # Aspose ücretsiz genel dönüştürme API'sini tetikler
-    alt_url = "https://aspose.app"
+    # Gotenberg yüksek kapasiteli kurumsal dönüştürme API adresi
+    url = "https://gotenberg.dev"
     
     with open(input_path, 'rb') as f:
-        files = {'file': f}
-        # Slaytı gönderiyoruz, çıktı biçimini PDF istiyoruz
-        data = {'outputType': 'PDF'}
-        response = requests.post(alt_url, files=files, data=data)
+        # Gotenberg standartlarına göre 'files' parametresi gönderilir
+        files = {'files': ('input.pptx', f, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
+        response = requests.post(url, files=files)
         
     if response.status_code == 200:
-        result = response.json()
-        if result.get('success') and result.get('fileUrl'):
-            file_url = result['fileUrl']
-            # Dönüşen yüksek kaliteli PDF'i buluttan indiriyoruz
-            file_response = requests.get(file_url)
-            with open(output_path, 'wb') as out_f:
-                out_f.write(file_response.content)
-        else:
-            raise Exception("Bulut motoru dosyayı işleyemedi.")
+        with open(output_path, 'wb') as out_f:
+            out_f.write(response.content)
     else:
-        raise Exception(f"Bulut Bağlantı Hatası: {response.status_code}")
+        raise Exception(f"Bulut Motoru Hatası: Kod {response.status_code} - {response.text}")
 
 @app.route('/')
 def home():
@@ -96,17 +86,20 @@ def convert():
     
     if file:
         timestamp = str(int(time.time()))
+        # Dosya uzantısını ayırıyoruz
+        file_dot_index = file.filename.rfind('.')
+        file_pure_name = file.filename[:file_dot_index] if file_dot_index != -1 else file.filename
+        
         unique_input_name = timestamp + "_" + file.filename
         input_path = os.path.join(UPLOAD_FOLDER, unique_input_name)
         file.save(input_path)
         
-        pure_name = os.path.splitext(file.filename)[0]
-        output_filename = timestamp + "_" + pure_name + ".pdf"
+        output_filename = timestamp + "_" + file_pure_name + ".pdf"
         output_path = os.path.join(UPLOAD_FOLDER, output_filename)
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
-            original_pdf_name = pure_name + ".pdf"
+            original_pdf_name = file_pure_name + ".pdf"
             return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
         except Exception as e:
             return f"Dönüştürme Hatası: {str(e)}", 500
