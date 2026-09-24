@@ -1,18 +1,15 @@
 import os
 from flask import Flask, render_template_string, request, send_file
-import urllib.request
-import json
+import requests
 import time
 
 app = Flask(__name__)
-# Geçici dosyaların birbiriyle karışmaması için sistemin geçici klasörünü kullanıyoruz
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ConvertAPI Gizli Anahtarın
 CONVERTAPI_SECRET = "jY7jvKeNryyweTDErVKEK3sSWebQ57WD"
 
-# Yeni sürümde arayüze belirgin bir başlık ekledim (Böylece yeni kodun aktif olduğunu göreceksin)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -50,13 +47,13 @@ HTML_TEMPLATE = """
             const label = document.getElementById('label-text');
             const btn = document.getElementById('submit-btn');
             if(input.files.length > 0) {
-                label.innerText = "✓ " + input.files[0].name;
+                label.innerText = "✓ " + input.files.name;
                 label.style.background = "#1e293b";
                 btn.style.display = "block";
             }
         }
         function showLoading() {
-            document.getElementById('status').innerText = "Bulut motoru slayt tasarımlarınızı birebir PDF'e işliyor... Lütfen bekleyin...";
+            document.getElementById('status').innerText = "Bulut motoru slayt tasarımlarınızı orijinal kalitede işliyor... Lütfen bekleyin...";
             document.getElementById('submit-btn').style.display = "none";
         }
     </script>
@@ -65,28 +62,23 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
+    # En güvenli bulut aktarım kütüphanesi olan requests ile dönüşüm başlar
     url = f"https://convertapi.com{CONVERTAPI_SECRET}"
     
     with open(input_path, 'rb') as f:
-        file_data = f.read()
+        files = {'File': f}
+        response = requests.post(url, files=files)
         
-    boundary = b'----WebKitFormBoundary7MA4YWxkTrZu0gW'
-    data = (
-        b'--' + boundary + b'\r\n' +
-        b'Content-Disposition: form-data; name="File"; filename="input.pptx"\r\n' +
-        b'Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation\r\n\r\n' +
-        file_data + b'\r\n' +
-        b'--' + boundary + b'--\r\n'
-    )
-    
-    req = urllib.request.Request(url, data=data)
-    req.add_header('Content-Type', f'multipart/form-data; boundary={boundary.decode()}')
-    
-    with urllib.request.urlopen(req) as response:
-        result = json.loads(response.read().decode())
-        # ConvertAPI'ın güncel JSON listesinden ilk elemanın indirme URL'ini güvenle çeker
+    if response.status_code == 200:
+        result = response.json()
         file_url = result['Files'][0]['Url']
-        urllib.request.urlretrieve(file_url, output_path)
+        
+        # Dosyayı indiriyoruz
+        file_response = requests.get(file_url)
+        with open(output_path, 'wb') as out_f:
+            out_f.write(file_response.content)
+    else:
+        raise Exception(f"Bulut Servis Hatasi: {response.text}")
 
 @app.route('/')
 def home():
@@ -99,7 +91,6 @@ def convert():
     if file.filename == '': return "Dosya secilmedi", 400
     
     if file:
-        # Sunucuda çakışma olmaması için benzersiz bir isim üretiyoruz
         timestamp = str(int(time.time()))
         unique_input_name = timestamp + "_" + file.filename
         input_path = os.path.join(UPLOAD_FOLDER, unique_input_name)
@@ -110,13 +101,11 @@ def convert():
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
-            # Kullanıcıya orijinal dosya adıyla indirtiyoruz
             original_pdf_name = os.path.splitext(file.filename)[0] + ".pdf"
             return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
         except Exception as e:
-            return f"Dönüştürme Hatası (Lütfen kodu ve API kotanızı kontrol edin): {str(e)}", 500
+            return f"Dönüştürme Hatası: {str(e)}", 500
         finally:
-            # Temizlik adımları
             if os.path.exists(input_path): os.remove(input_path)
             if os.path.exists(output_path): os.remove(output_path)
 
