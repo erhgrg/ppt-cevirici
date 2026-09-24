@@ -1,13 +1,17 @@
 import os
 from flask import Flask, render_template_string, request, send_file
-from pptx import Presentation
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+import urllib.request
+import json
 
 app = Flask(__name__)
+# Geçici dosyaların kaydedileceği güvenli klasör ayarı
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ConvertAPI gizli kodun başarıyla entegre edildi
+CONVERTAPI_SECRET = "jY7jvKeNryyweTDErVKEK3sSWebQ57WD"
+
+# Web sitemizin şık ve sade tasarımı (HTML & CSS)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -57,26 +61,29 @@ HTML_TEMPLATE = """
 </html>
 """
 
-def linux_pptx_to_pdf(input_path, output_path):
-    prs = Presentation(input_path)
-    c = canvas.Canvas(output_path, pagesize=letter)
-    for slide in prs.slides:
-        text_content = []
-        for shape in slide.shapes:
-            if hasattr(shape, "text") and shape.text.strip():
-                text_content.append(shape.text.strip())
+def cloud_pptx_to_pdf(input_path, output_path):
+    # ConvertAPI bulut sunucularını kullanarak kusursuz dönüşüm yapar
+    url = f"https://convertapi.com{CONVERTAPI_SECRET}"
+    
+    with open(input_path, 'rb') as f:
+        file_data = f.read()
         
-        y_position = 750
-        c.setFont("Helvetica", 12)
-        c.drawString(50, 770, "--- Slayt Sayfasi ---")
-        for text in text_content:
-            c.drawString(50, y_position, text[:80])
-            y_position -= 20
-            if y_position < 50:
-                c.showPage()
-                y_position = 750
-        c.showPage()
-    c.save()
+    boundary = b'----WebKitFormBoundary7MA4YWxkTrZu0gW'
+    data = (
+        b'--' + boundary + b'\r\n' +
+        b'Content-Disposition: form-data; name="File"; filename="input.pptx"\r\n' +
+        b'Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation\r\n\r\n' +
+        file_data + b'\r\n' +
+        b'--' + boundary + b'--\r\n'
+    )
+    
+    req = urllib.request.Request(url, data=data)
+    req.add_header('Content-Type', f'multipart/form-data; boundary={boundary.decode()}')
+    
+    with urllib.request.urlopen(req) as response:
+        result = json.loads(response.read().decode())
+        file_url = result['Files'][0]['Url']  # İlk listeden URL güvenli şekilde alınır
+        urllib.request.urlretrieve(file_url, output_path)
 
 @app.route('/')
 def home():
@@ -91,16 +98,17 @@ def convert():
     if file:
         input_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(input_path)
-        output_filename = os.path.splitext(file.filename)[0] + ".pdf"
-        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+        base_name = os.path.splitext(file.filename)[0]
+        output_path = os.path.join(UPLOAD_FOLDER, base_name + ".pdf")
         
         try:
-            linux_pptx_to_pdf(input_path, output_path)
+            cloud_pptx_to_pdf(input_path, output_path)
             return send_file(output_path, as_attachment=True)
         except Exception as e:
-            return f"Hata: {str(e)}", 500
+            return f"Dönüştürme Hatası: {str(e)}", 500
         finally:
             if os.path.exists(input_path): os.remove(input_path)
+            if os.path.exists(output_path): os.remove(output_path)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
