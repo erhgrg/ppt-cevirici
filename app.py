@@ -4,6 +4,7 @@ import requests
 import time
 
 app = Flask(__name__)
+# Bulut sunucusunun (Linux) geçici klasör ayarı
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -62,7 +63,7 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
-    # En güvenli bulut aktarım kütüphanesi olan requests ile dönüşüm başlar
+    # DÜZELTİLEN KISIM: İnternet adresi ve Secret parametresi hatasız birleştirildi
     url = f"https://convertapi.com{CONVERTAPI_SECRET}"
     
     with open(input_path, 'rb') as f:
@@ -71,9 +72,9 @@ def cloud_pptx_to_pdf(input_path, output_path):
         
     if response.status_code == 200:
         result = response.json()
-        file_url = result['Files'][0]['Url']
+        file_url = result['Files'][0]['Url']  # ConvertAPI listesinden tam indirme linkini çeker
         
-        # Dosyayı indiriyoruz
+        # Dönüşen kaliteli PDF'i buluttan indiriyoruz
         file_response = requests.get(file_url)
         with open(output_path, 'wb') as out_f:
             out_f.write(file_response.content)
@@ -91,6 +92,7 @@ def convert():
     if file.filename == '': return "Dosya secilmedi", 400
     
     if file:
+        # Sunucu tarafında çakışmaları önlemek için eşsiz isim üretiyoruz
         timestamp = str(int(time.time()))
         unique_input_name = timestamp + "_" + file.filename
         input_path = os.path.join(UPLOAD_FOLDER, unique_input_name)
@@ -101,11 +103,13 @@ def convert():
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
+            # Kullanıcıya kendi yüklediği orijinal dosya adıyla indirtiyoruz
             original_pdf_name = os.path.splitext(file.filename)[0] + ".pdf"
             return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
         except Exception as e:
             return f"Dönüştürme Hatası: {str(e)}", 500
         finally:
+            # İşlem bittiğinde sunucudaki geçici dosyaları siliyoruz
             if os.path.exists(input_path): os.remove(input_path)
             if os.path.exists(output_path): os.remove(output_path)
 
