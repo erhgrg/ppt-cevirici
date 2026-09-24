@@ -2,42 +2,45 @@ import os
 from flask import Flask, render_template_string, request, send_file
 import urllib.request
 import json
+import time
 
 app = Flask(__name__)
-# Geçici dosyaların kaydedileceği güvenli klasör ayarı
+# Geçici dosyaların birbiriyle karışmaması için sistemin geçici klasörünü kullanıyoruz
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ConvertAPI gizli kodun başarıyla entegre edildi
+# ConvertAPI Gizli Anahtarın
 CONVERTAPI_SECRET = "jY7jvKeNryyweTDErVKEK3sSWebQ57WD"
 
-# Web sitemizin şık ve sade tasarımı (HTML & CSS)
+# Yeni sürümde arayüze belirgin bir başlık ekledim (Böylece yeni kodun aktif olduğunu göreceksin)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online PPTX -> PDF Dönüştürücü</title>
+    <title>Süper Kaliteli PPTX -> PDF Dönüştürücü v2</title>
     <style>
-        body { font-family: 'Arial', sans-serif; background: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
-        h2 { color: #333; margin-bottom: 20px; }
+        body { font-family: 'Arial', sans-serif; background: #eef2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 420px; width: 90%; }
+        h2 { color: #1e293b; margin-bottom: 5px; font-size: 24px; }
+        .version { color: #107C41; font-weight: bold; margin-bottom: 25px; font-size: 14px; }
         input[type="file"] { display: none; }
-        .file-label { display: block; background: #0078D4; color: white; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 15px; transition: 0.3s; }
+        .file-label { display: block; background: #0078D4; color: white; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; transition: 0.2s; }
         .file-label:hover { background: #005a9e; }
-        .btn-submit { background: #107C41; color: white; border: none; padding: 12px 25px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; width: 100%; display: none; }
+        .btn-submit { background: #107C41; color: white; border: none; padding: 14px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; width: 100%; display: none; box-shadow: 0 4px 12px rgba(16,124,65,0.2); }
         .btn-submit:hover { background: #0b592e; }
-        .status { margin-top: 15px; color: #666; font-size: 14px; }
+        .status { margin-top: 20px; color: #64748b; font-size: 14px; font-style: italic; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>PPTX to PDF Converter</h2>
+        <h2>Bulut PDF Dönüştürücü</h2>
+        <div class="version">✨ ConvertAPI Canlı Motoru Aktif ✨</div>
         <form action="/convert" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
-            <label for="file-upload" class="file-label" id="label-text">📂 PowerPoint Dosyası Seç</label>
+            <label for="file-upload" class="file-label" id="label-text">📂 PowerPoint Dosyası Seç (.pptx)</label>
             <input id="file-upload" type="file" name="file" accept=".pptx, .ppt" onchange="fileSelected()">
-            <button type="submit" id="submit-btn" class="btn-submit">🔒 PDF'e Dönüştür ve İndir</button>
+            <button type="submit" id="submit-btn" class="btn-submit">🚀 Orijinal Tasarımda PDF'e Dönüştür</button>
         </form>
         <div id="status" class="status"></div>
     </div>
@@ -47,13 +50,13 @@ HTML_TEMPLATE = """
             const label = document.getElementById('label-text');
             const btn = document.getElementById('submit-btn');
             if(input.files.length > 0) {
-                label.innerText = "✓ Dosya Seçildi";
-                label.style.background = "#2b88d8";
+                label.innerText = "✓ " + input.files[0].name;
+                label.style.background = "#1e293b";
                 btn.style.display = "block";
             }
         }
         function showLoading() {
-            document.getElementById('status').innerText = "Dönüştürülüyor... Lütfen bekleyin...";
+            document.getElementById('status').innerText = "Bulut motoru slayt tasarımlarınızı birebir PDF'e işliyor... Lütfen bekleyin...";
             document.getElementById('submit-btn').style.display = "none";
         }
     </script>
@@ -62,7 +65,6 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
-    # ConvertAPI bulut sunucularını kullanarak kusursuz dönüşüm yapar
     url = f"https://convertapi.com{CONVERTAPI_SECRET}"
     
     with open(input_path, 'rb') as f:
@@ -82,7 +84,8 @@ def cloud_pptx_to_pdf(input_path, output_path):
     
     with urllib.request.urlopen(req) as response:
         result = json.loads(response.read().decode())
-        file_url = result['Files'][0]['Url']  # İlk listeden URL güvenli şekilde alınır
+        # ConvertAPI'ın güncel JSON listesinden ilk elemanın indirme URL'ini güvenle çeker
+        file_url = result['Files'][0]['Url']
         urllib.request.urlretrieve(file_url, output_path)
 
 @app.route('/')
@@ -96,17 +99,24 @@ def convert():
     if file.filename == '': return "Dosya secilmedi", 400
     
     if file:
-        input_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        # Sunucuda çakışma olmaması için benzersiz bir isim üretiyoruz
+        timestamp = str(int(time.time()))
+        unique_input_name = timestamp + "_" + file.filename
+        input_path = os.path.join(UPLOAD_FOLDER, unique_input_name)
         file.save(input_path)
-        base_name = os.path.splitext(file.filename)[0]
-        output_path = os.path.join(UPLOAD_FOLDER, base_name + ".pdf")
+        
+        output_filename = timestamp + "_" + os.path.splitext(file.filename)[0] + ".pdf"
+        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
-            return send_file(output_path, as_attachment=True)
+            # Kullanıcıya orijinal dosya adıyla indirtiyoruz
+            original_pdf_name = os.path.splitext(file.filename)[0] + ".pdf"
+            return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
         except Exception as e:
-            return f"Dönüştürme Hatası: {str(e)}", 500
+            return f"Dönüştürme Hatası (Lütfen kodu ve API kotanızı kontrol edin): {str(e)}", 500
         finally:
+            # Temizlik adımları
             if os.path.exists(input_path): os.remove(input_path)
             if os.path.exists(output_path): os.remove(output_path)
 
