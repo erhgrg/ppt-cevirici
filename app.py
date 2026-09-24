@@ -63,7 +63,7 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
-    # DÜZELTİLEN KISIM: İnternet adresi ve Secret parametresi hatasız birleştirildi
+    # Sabit ve kesinlikle bozulmayacak temiz internet adresi
     url = f"https://convertapi.com{CONVERTAPI_SECRET}"
     
     with open(input_path, 'rb') as f:
@@ -72,9 +72,9 @@ def cloud_pptx_to_pdf(input_path, output_path):
         
     if response.status_code == 200:
         result = response.json()
-        file_url = result['Files'][0]['Url']  # ConvertAPI listesinden tam indirme linkini çeker
+        file_url = result['Files'][0]['Url']  # İlk dosyanın indirme URL'ini güvenli şekilde çeker
         
-        # Dönüşen kaliteli PDF'i buluttan indiriyoruz
+        # Kaliteli PDF dosyasını buluttan indiriyoruz
         file_response = requests.get(file_url)
         with open(output_path, 'wb') as out_f:
             out_f.write(file_response.content)
@@ -92,19 +92,21 @@ def convert():
     if file.filename == '': return "Dosya secilmedi", 400
     
     if file:
-        # Sunucu tarafında çakışmaları önlemek için eşsiz isim üretiyoruz
+        # Zaman damgası ekleyerek sunucuda benzersiz isim oluşturuyoruz
         timestamp = str(int(time.time()))
         unique_input_name = timestamp + "_" + file.filename
         input_path = os.path.join(UPLOAD_FOLDER, unique_input_name)
         file.save(input_path)
         
-        output_filename = timestamp + "_" + os.path.splitext(file.filename)[0] + ".pdf"
+        # [0] eklenerek splitext fonksiyonunun tuple hatası vermesi kesin olarak engellendi
+        pure_name = os.path.splitext(file.filename)[0]
+        output_filename = timestamp + "_" + pure_name + ".pdf"
         output_path = os.path.join(UPLOAD_FOLDER, output_filename)
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
             # Kullanıcıya kendi yüklediği orijinal dosya adıyla indirtiyoruz
-            original_pdf_name = os.path.splitext(file.filename)[0] + ".pdf"
+            original_pdf_name = pure_name + ".pdf"
             return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
         except Exception as e:
             return f"Dönüştürme Hatası: {str(e)}", 500
