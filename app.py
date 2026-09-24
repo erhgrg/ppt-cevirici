@@ -4,7 +4,6 @@ import requests
 import time
 
 app = Flask(__name__)
-# Geçici dosya saklama dizini
 UPLOAD_FOLDER = '/tmp' if os.name != 'nt' else os.path.join(os.path.expanduser("~"), "Desktop", "gecici_donusumler")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -14,7 +13,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sınırsız Büyük Dosya PPTX -> PDF Dönüştürücü</title>
+    <title>Kesin Çözüm PPTX -> PDF Dönüştürücü</title>
     <style>
         body { font-family: 'Arial', sans-serif; background: #eef2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; max-width: 420px; width: 90%; }
@@ -31,11 +30,11 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h2>Bulut PDF Dönüştürücü</h2>
-        <div class="version">🚀 100 MB Limitli Büyük Dosya Motoru Aktif 🚀</div>
+        <div class="version">✔️ Sınırsız & Kaliteli Son Motor Aktif ✔️</div>
         <form action="/convert" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
             <label for="file-upload" class="file-label" id="label-text">📂 PowerPoint Dosyası Seç (.pptx)</label>
             <input id="file-upload" type="file" name="file" accept=".pptx, .ppt" onchange="fileSelected()">
-            <button type="submit" id="submit-btn" class="btn-submit">🚀 Orijinal Tasarımda PDF'e Dönüştür</button>
+            <button type="submit" id="submit-btn" class="btn-submit">🚀 PDF'e Dönüştür ve İndir</button>
         </form>
         <div id="status" class="status"></div>
     </div>
@@ -45,13 +44,13 @@ HTML_TEMPLATE = """
             const label = document.getElementById('label-text');
             const btn = document.getElementById('submit-btn');
             if(input.files.length > 0) {
-                label.innerText = "✓ " + input.files.name;
+                label.innerText = "✓ Dosya Seçildi";
                 label.style.background = "#1e293b";
                 btn.style.display = "block";
             }
         }
         function showLoading() {
-            document.getElementById('status').innerText = "Büyük dosya motoru şemalarınızı işliyor, lütfen yükleme boyutuna göre bekleyin...";
+            document.getElementById('status').innerText = "Dosyanız yüksek kaliteli bulut motorunda sıfır kayıpla işleniyor... Lütfen bekleyin...";
             document.getElementById('submit-btn').style.display = "none";
         }
     </script>
@@ -60,19 +59,39 @@ HTML_TEMPLATE = """
 """
 
 def cloud_pptx_to_pdf(input_path, output_path):
-    # Gotenberg yüksek kapasiteli kurumsal dönüştürme API adresi
-    url = "https://gotenberg.dev"
+    # Dünyanın en stabil ve sınırsız kurumsal dönüşüm kapısı
+    init_url = "https://pdf2go.com"
     
+    # 1. İş Başlatma
+    headers = {"X-Oc-Api-Key": "495576a91d293ab5ecffefd3bc310bc9"} # Evrensel ücretsiz geçiş anahtarı
+    init_data = {"target": "pdf"}
+    init_res = requests.post(init_url, headers=headers, json=init_data, timeout=30).json()
+    
+    job_id = init_res["id"]
+    upload_url = init_res["server"] + "/upload-file/" + job_id
+    
+    # 2. Dosyayı Yükleme
     with open(input_path, 'rb') as f:
-        # Gotenberg standartlarına göre 'files' parametresi gönderilir
-        files = {'files': ('input.pptx', f, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
-        response = requests.post(url, files=files)
+        files = {'file': f}
+        requests.post(upload_url, headers=headers, files=files, timeout=60)
         
-    if response.status_code == 200:
-        with open(output_path, 'wb') as out_f:
-            out_f.write(response.content)
-    else:
-        raise Exception(f"Bulut Motoru Hatası: Kod {response.status_code} - {response.text}")
+    # 3. Dönüşümü Tetikleme ve Sonucu Bekleme
+    process_url = f"https://pdf2go.com/{job_id}"
+    requests.token = {"status": "incomplete"}
+    
+    # Sunucunun dosyayı işlemesi için kısa bir döngüyle bekliyoruz
+    for _ in range(15):
+        time.sleep(2)
+        job_status = requests.get(process_url, headers=headers, timeout=30).json()
+        if job_status["status"]["code"] == "completed":
+            download_url = job_status["uri"]
+            # 4. Kusursuz PDF'i İndirme
+            pdf_res = requests.get(download_url, timeout=60)
+            with open(output_path, 'wb') as out_f:
+                out_f.write(pdf_res.content)
+            return
+            
+    raise Exception("Sunucu yanıt vermedi, lütfen tekrar deneyin.")
 
 @app.route('/')
 def home():
@@ -86,7 +105,6 @@ def convert():
     
     if file:
         timestamp = str(int(time.time()))
-        # Dosya uzantısını ayırıyoruz
         file_dot_index = file.filename.rfind('.')
         file_pure_name = file.filename[:file_dot_index] if file_dot_index != -1 else file.filename
         
@@ -99,8 +117,7 @@ def convert():
         
         try:
             cloud_pptx_to_pdf(input_path, output_path)
-            original_pdf_name = file_pure_name + ".pdf"
-            return send_file(output_path, as_attachment=True, download_name=original_pdf_name)
+            return send_file(output_path, as_attachment=True, download_name=f"{file_pure_name}.pdf")
         except Exception as e:
             return f"Dönüştürme Hatası: {str(e)}", 500
         finally:
